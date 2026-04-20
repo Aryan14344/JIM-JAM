@@ -1,0 +1,35 @@
+# Comprehensive Guide: The Reddit SNA Pipeline
+
+This guide provides the theoretical and technical foundation for the pipeline designed to model information diffusion on Reddit.
+
+## 1. Data Acquisition Strategy (The Reddit Context)
+Subreddits are semi-permeable silos. We model the network as a **Bipartite Projections** or **Author-Reply Graphs**.
+- **Rationale**: Direct replies indicate a flow of attention. By weighting edges based on the number of replies between users, we quantify "conversational strength."
+- **Temporal Handling**: Information diffusion is time-dependent. We store interactions as a time-series to enable "Snapshot Analysis"—analyzing how the network structure changes before and after a viral event.
+
+## 2. The "Anti-Fluff" Engine (Data Quality)
+### Quantile-Based Edge Pruning
+In any social network, the majority of edges are "weak ties" or one-off interactions.
+- **Why Quantiles?**: Standard thresholding (e.g., `weight > 1`) is arbitrary. Quantile thresholding (e.g., `top 10%`) adapts to the specific activity density of the subreddit being analyzed.
+- **Mathematical Effect**: It filters out the "long tail" of noise, leaving the **Core Graph**. This significantly reduces computational complexity for neighbor-traversal algorithms.
+
+### Scaling and Normalization
+Standard deviation scaling ($Z$-score) is applied to node features like Karma and Account Age to ensure they contribute equally to the dimensionality reduction step, preventing "Karma-heavy" users from dominating the latent mapping.
+
+## 3. Latent Pattern Discovery
+### Node2Vec: Why use embeddings?
+Traditional community detection (like Louvain) only looks at direct connections. **Node2Vec** uses random walks to capture the "neighborhood role."
+- **Concept**: If two users interact with similar types of people, they will be close in the embedding space, even if they have never interacted with each other.
+- **UMAP**: This non-linear dimensionality reduction technique preserves local structure better than PCA, making it ideal for identifying "clusters of behavior."
+
+## 4. Derived Knowledge: Structural Holes
+### The Power of Being a Broker
+In Ronald Burt's theory, **Structural Holes** are the gaps between groups of people. Nodes that bridge these gaps (Brokers) have:
+1. **Information Diversity**: Access to unique info from different silos.
+2. **Control**: They can accelerate or halt information flow between groups.
+- **Constraint Index**: We measure this to find nodes who are *NOT* trapped in their own echo chambers. A node with low constraint is a "Broker."
+
+## 5. Diffusion: The Independent Cascade Model (ICM)
+ICM assumes that when a node becomes "active" (convinced by a rumor/news), it has one chance to activate each of its neighbors with a probability $p$.
+- **Strategic Utility**: By simulating this on the **Pruned Graph**, we can identify which "seed nodes" lead to the largest global cascades.
+- **Halting Spread**: By removing nodes with the lowest Constraint Index (Brokers), we can mathematically prove how much more effective it is than simply removing high-degree (popular) nodes.
