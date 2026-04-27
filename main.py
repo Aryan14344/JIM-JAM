@@ -1,6 +1,10 @@
 import sys
 import pandas as pd
 from reddit_collector import RedditCollector
+from local_collector import LocalDumpCollector
+from torrent_downloader import TorrentManager
+from config import TARGET_SUBREDDITS
+import os
 from processing_engine import AntiFluffEngine
 from sentiment_engine import SentimentEngine
 from latent_modeler import LatentModeler
@@ -8,18 +12,31 @@ from advanced_analytics import AdvancedAnalytics
 from diffusion_simulator import DiffusionSimulator
 from visualizer import SocialVisualizer
 
-def run_pipeline(subreddit_name, praw_creds):
-    print(f"=== Starting Reddit SNA Pipeline for r/{subreddit_name} ===")
+def run_pipeline(subreddit_name, praw_creds, mode='auto'):
+    print(f"=== Starting Reddit SNA Pipeline ===")
     
-    # 1. Collection
-    collector = RedditCollector(
-        client_id=praw_creds['client_id'],
-        client_secret=praw_creds['client_secret'],
-        user_agent=praw_creds['user_agent']
-    )
-    # Using a small limit for demonstration
-    df_raw = collector.fetch_subreddit_interactions(subreddit_name, limit=10)
+    # 1. Collection (Automatic Source Selection)
+    dump_path = f"data/{subreddit_name}_comments.zst"
     
+    if os.path.exists(dump_path) and (mode == 'auto' or mode == 'archive'):
+        # ARCHIVE MODE: Fast processing of local dumps
+        print(f"[*] Found local archival data for r/{subreddit_name}. Switching to ARCHIVE mode.")
+        collector = LocalDumpCollector(dump_dir="data")
+        df_raw = collector.stream_subreddit(subreddit_name, limit=20000)
+    elif mode == 'live':
+        print(f"[*] Connecting to Reddit API (LIVE mode)...")
+        collector = RedditCollector(
+            client_id=praw_creds['client_id'],
+            client_secret=praw_creds['client_secret'],
+            user_agent=praw_creds['user_agent']
+        )
+        df_raw = collector.fetch_subreddit_interactions(subreddit_name, limit=50)
+    else:
+        # Fallback to help message
+        print(f"[!] Error: No local data found for r/{subreddit_name} and LIVE mode was not requested.")
+        print(f"[*] Please download the .zst dump and place it in the 'data/' folder.")
+        sys.exit(1)
+
     # 2. Sentiment Enrichment (Anti-Fluff Feature)
     print("[*] Enriching interactions with sentiment...")
     # (Mock text for demonstration if collector doesn't provide it)
@@ -65,5 +82,14 @@ if __name__ == "__main__":
         'user_agent': 'SNA_Bot_v1.0'
     }
     
+    # 1. Setup mode (Download Data)
+    if len(sys.argv) > 1 and sys.argv[1] == "setup":
+        MAGNET = "magnet:?xt=urn:btih:3e3f64dee22dc304cdd2546254ca1f8e8ae542b4&tr=https%3A%2F%2Facademictorrents.com%2Fannounce.php&tr=udp%3A%2F%2Ftracker.coppersurfer.tk%3A6969&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+        manager = TorrentManager()
+        manager.download_subreddits(MAGNET, subreddit_list=TARGET_SUBREDDITS)
+        sys.exit(0)
+
+    # 2. Pipeline mode
+    mode = sys.argv[2] if len(sys.argv) > 2 else "auto"
     target_sub = sys.argv[1] if len(sys.argv) > 1 else "dataisbeautiful"
-    run_pipeline(target_sub, creds)
+    run_pipeline(target_sub, creds, mode=mode)
