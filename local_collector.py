@@ -60,21 +60,43 @@ class LocalDumpCollector:
                     except Exception as e:
                         continue
 
-        # Post-processing to map comment_id -> author for the target
-        # In a real dump, we might need to build a map or just use IDs.
-        # For simplicity in the pipeline, we use IDs as target placeholders if 
-        # the parent author isn't in the same stream.
-        
         df = pd.DataFrame(interactions)
+        if df.empty:
+            return df
+
         # Filter deleted users
         df = df[df['source'] != '[deleted]']
         
-        # Note: True author-to-author mapping requires a second pass or a lookup table.
-        # For the course project, using the parent_id as the 'target' node is a 
-        # mathematically valid proxy for structural positioning.
-        df = df.rename(columns={'target_id': 'target'})
+        # 1. Map parent_id to actual author if available in the same batch
+        # parent_id looks like 't1_abc123'
+        df['target'] = df['target_id'].apply(lambda x: x.split('_')[-1] if '_' in str(x) else x)
         
-        return df
+        # Build ID -> Author map from current batch
+        id_to_author = dict(zip(df['comment_id'], df['source']))
+        
+        # Attempt to replace target IDs with actual author names
+        df['target_author'] = df['target'].map(id_to_author)
+        
+        # If target author is not found in batch, we use the ID as a proxy (common in SNA)
+        df['target'] = df['target_author'].fillna(df['target'])
+        
+        # 2. AGGREGATE: Turn raw interactions into weighted edges
+        # This is CRITICAL for the AntiFluffEngine
+        print(f"[*] Aggregating {len(df)} interactions into weighted edges...")
+        
+        # Calculate weights separately to ensure perfect alignment
+        weights = df.groupby(['source', 'target']).size().reset_index(name='weight')
+        
+        # Aggregate other features
+        df_weighted = df.groupby(['source', 'target']).agg({
+            'timestamp': 'max',
+            'text': lambda x: " ".join(map(str, x))
+        }).reset_index()
+        
+        # Merge weight back in
+        df_final = pd.merge(df_weighted, weights, on=['source', 'target'])
+        
+        return df_final
 
 # Explanation:
 # 1. ZStandard: We use zstd.stream_reader to avoid loading the multi-gigabyte file into RAM.

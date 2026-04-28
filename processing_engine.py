@@ -14,7 +14,7 @@ class AntiFluffEngine:
     def _build_initial_graph(self):
         G = nx.from_pandas_edgelist(
             self.df, 'source', 'target', 
-            edge_attr=['weight', 'timestamp'],
+            edge_attr=['weight', 'timestamp', 'sentiment'],
             create_using=nx.DiGraph()
         )
         return G
@@ -39,6 +39,15 @@ class AntiFluffEngine:
         self.G.remove_nodes_from(list(nx.isolates(self.G)))
         
         return self.G
+
+    def export_processed_data(self, output_path):
+        """
+        Exports the cleaned interaction graph to a CSV file.
+        """
+        print(f"[*] Exporting cleaned data to {output_path}...")
+        df_edges = nx.to_pandas_edgelist(self.G)
+        df_edges.to_csv(output_path, index=False)
+        return output_path
 
     def scale_node_features(self):
         """
